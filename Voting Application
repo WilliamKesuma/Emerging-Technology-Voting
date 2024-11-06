@@ -1,0 +1,121 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract VotingApp {
+    
+    // Enum to define election phases
+    enum ElectionPhase { NotStarted, Open, Closed }
+    ElectionPhase public electionStatus;
+
+    // Structs for Candidate and Voter
+    struct Candidate {
+        string name;
+        uint id;
+        uint voteCount;
+    }
+
+    struct Voter {
+        bool hasVoted;
+        uint votedCandidateId;
+    }
+
+    // State variables
+    address public admin;
+    uint public candidateCount;
+    mapping(uint => Candidate) public candidates;
+    mapping(address => Voter) public voters;
+    
+    // Events
+    event CandidateAdded(uint candidateId, string name);
+    event VoterAdded(address voterAddress);
+    event VoteCast(address voter, uint candidateId);
+    event VotingOpened();
+    event VotingClosed();
+
+    // Modifiers
+    modifier onlyAdmin() {
+        require(msg.sender == admin, "Only admin can perform this action");
+        _;
+    }
+
+    modifier onlyDuringVoting() {
+        require(electionStatus == ElectionPhase.Open, "Voting is not open");
+        _;
+    }
+
+    modifier onlyOnce() {
+        require(!voters[msg.sender].hasVoted, "Voter has already voted");
+        _;
+    }
+
+    // Constructor to set the admin as the contract deployer
+    constructor() {
+        admin = msg.sender;
+        electionStatus = ElectionPhase.NotStarted;
+    }
+
+    // Add a candidate - only admin
+    function addCandidate(string memory _name) public onlyAdmin {
+        require(electionStatus == ElectionPhase.NotStarted, "Cannot add candidates now");
+        candidates[candidateCount] = Candidate({
+            name: _name,
+            id: candidateCount,
+            voteCount: 0
+        });
+        emit CandidateAdded(candidateCount, _name);
+        candidateCount++;
+    }
+
+    // Register a voter - only admin
+    function addVoter(address _voterAddress) public onlyAdmin {
+        require(electionStatus == ElectionPhase.NotStarted, "Cannot add voters now");
+        voters[_voterAddress] = Voter({
+            hasVoted: false,
+            votedCandidateId: 0
+        });
+        emit VoterAdded(_voterAddress);
+    }
+
+    // Open the voting period - only admin
+    function openVoting() public onlyAdmin {
+        require(electionStatus == ElectionPhase.NotStarted, "Voting has already started");
+        electionStatus = ElectionPhase.Open;
+        emit VotingOpened();
+    }
+
+    // Close the voting period - only admin
+    function closeVoting() public onlyAdmin {
+        require(electionStatus == ElectionPhase.Open, "Voting is not open");
+        electionStatus = ElectionPhase.Closed;
+        emit VotingClosed();
+    }
+
+    // Voting function - only registered voters, only during voting period, only vote once
+    function vote(uint _candidateId) public onlyDuringVoting onlyOnce {
+        require(voters[msg.sender].hasVoted == false, "Already voted");
+        require(_candidateId < candidateCount, "Invalid candidate ID");
+
+        voters[msg.sender].hasVoted = true;
+        voters[msg.sender].votedCandidateId = _candidateId;
+        candidates[_candidateId].voteCount++;
+
+        emit VoteCast(msg.sender, _candidateId);
+    }
+
+    // Public view function to get the vote count of a specific candidate
+    function getCandidateVotes(uint _candidateId) public view returns (uint) {
+        require(_candidateId < candidateCount, "Invalid candidate ID");
+        return candidates[_candidateId].voteCount;
+    }
+
+    // Public view function to get the current election status
+    function getElectionStatus() public view returns (string memory) {
+        if (electionStatus == ElectionPhase.NotStarted) {
+            return "Not Started";
+        } else if (electionStatus == ElectionPhase.Open) {
+            return "Open";
+        } else {
+            return "Closed";
+        }
+    }
+}
