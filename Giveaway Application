@@ -1,0 +1,90 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract BagiBagi {
+    address public owner;
+    uint256 public giveawayId = 1;
+
+    struct Giveaway {
+        uint256 amount;
+        bool claimed;
+    }
+
+    // Mappings
+    mapping(address => uint256[]) public userCoupons;
+    mapping(uint256 => Giveaway) public giveaways;
+
+    // Events
+    event DonationReceived(address indexed donor, uint256 amount, uint256 couponId);
+    event WinnerAssigned(uint256 indexed couponId, address indexed winner);
+    event PrizeClaimed(uint256 indexed couponId, address indexed winner, uint256 amount);
+
+    // Modifiers
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not the contract owner");
+        _;
+    }
+
+    modifier onlyWinner(uint256 _couponId) {
+        require(userCoupons[msg.sender].length > 0, "You have no coupons");
+        Giveaway memory giveaway = giveaways[_couponId];
+        require(!giveaway.claimed, "Already claimed");
+        _;
+    }
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    // Donate Ether and receive a coupon
+    function donate() external payable {
+        require(msg.value > 0, "Donation must be greater than zero");
+
+        // Create a giveaway entry
+        giveaways[giveawayId] = Giveaway({
+            amount: msg.value,
+            claimed: false
+        });
+
+        // Assign the coupon to the donor
+        userCoupons[msg.sender].push(giveawayId);
+
+        emit DonationReceived(msg.sender, msg.value, giveawayId);
+
+        // Increment giveaway ID for the next donation
+        giveawayId++;
+    }
+
+    // Assign a winner to a giveaway
+    function assignWinner(uint256 _couponId, address _winner) external onlyOwner {
+        require(giveaways[_couponId].amount > 0, "Invalid coupon");
+        userCoupons[_winner].push(_couponId);
+
+        emit WinnerAssigned(_couponId, _winner);
+    }
+
+    // Claim the prize
+    function claimPrize(uint256 _couponId) external onlyWinner(_couponId) {
+        Giveaway storage giveaway = giveaways[_couponId];
+        require(giveaway.amount > 0, "Invalid giveaway");
+        require(!giveaway.claimed, "Already claimed");
+
+        // Mark as claimed
+        giveaway.claimed = true;
+
+        // Transfer the Ether
+        payable(msg.sender).transfer(giveaway.amount);
+
+        emit PrizeClaimed(_couponId, msg.sender, giveaway.amount);
+    }
+
+    // Public view functions
+    function getCoupons(address _user) external view returns (uint256[] memory) {
+        return userCoupons[_user];
+    }
+
+    function getGiveawayDetails(uint256 _couponId) external view returns (uint256 amount, bool claimed) {
+        Giveaway memory giveaway = giveaways[_couponId];
+        return (giveaway.amount, giveaway.claimed);
+    }
+}
